@@ -9,11 +9,13 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "Binding.hpp"
 #include "CppObjectMapper.h"
+#include "DeclarationGenerator.h"
 
 #include "libplatform/libplatform.h"
 #include "v8.h"
@@ -74,6 +76,21 @@ int TestClass::CreatedCount = 0;
 
 UsingCppType(TestClass);
 
+static void RegisterExampleBindings()
+{
+    puerts::DefineClass<TestClass>()
+        .Constructor<int>()
+        .Function("Print", MakeFunction(&TestClass::Print))
+        .Function("GetCreatedCount", MakeFunction(&TestClass::GetCreatedCount))
+        .Function("AddAll", MakeFunction(&TestClass::AddAll))
+        .Property("X", MakeProperty(&TestClass::X))
+        .Method("Add", MakeFunction(&TestClass::Add))
+        .Method("SetX", MakeFunction(&TestClass::SetX))
+        .Method("Scale", MakeFunction(&TestClass::Scale))
+        .Method("Describe", MakeFunction(&TestClass::Describe))
+        .Register();
+}
+
 static std::string ReadTextFile(const std::string& path)
 {
     std::ifstream file(path, std::ios::binary);
@@ -87,14 +104,9 @@ static std::string ReadTextFile(const std::string& path)
     return stream.str();
 }
 
-static std::string ResolveScriptPath(int argc, char* argv[])
+static std::string ResolveScriptPath()
 {
     std::vector<std::string> candidates;
-    if (argc > 1 && argv[1] && argv[1][0] != '\0')
-    {
-        candidates.emplace_back(argv[1]);
-    }
-
     candidates.emplace_back("hello-world.ts");
     candidates.emplace_back(".\\hello-world.ts");
     candidates.emplace_back("..\\hello-world.ts");
@@ -116,6 +128,57 @@ static std::string ResolveScriptPath(int argc, char* argv[])
         message << "\n  - " << candidate;
     }
     throw std::runtime_error(message.str());
+}
+
+struct ProgramOptions
+{
+    std::string ScriptPath;
+    std::string DtsOutputPath;
+    bool DtsOnly = false;
+};
+
+static ProgramOptions ParseProgramOptions(int argc, char* argv[])
+{
+    ProgramOptions Options;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string Arg = argv[i];
+        if (Arg == "--script")
+        {
+            if (i + 1 >= argc)
+            {
+                throw std::runtime_error("--script requires a path");
+            }
+            Options.ScriptPath = argv[++i];
+        }
+        else if (Arg == "--dts-out")
+        {
+            if (i + 1 >= argc)
+            {
+                throw std::runtime_error("--dts-out requires a path");
+            }
+            Options.DtsOutputPath = argv[++i];
+        }
+        else if (Arg == "--dts-only")
+        {
+            Options.DtsOnly = true;
+        }
+        else if (!Arg.empty() && Arg[0] == '-')
+        {
+            throw std::runtime_error("unknown option: " + Arg);
+        }
+        else if (Options.ScriptPath.empty())
+        {
+            Options.ScriptPath = Arg;
+        }
+        else
+        {
+            throw std::runtime_error("unexpected positional argument: " + Arg);
+        }
+    }
+
+    return Options;
 }
 
 static void ReportException(v8::Isolate* isolate, v8::TryCatch& try_catch)
@@ -151,6 +214,35 @@ static void ReportException(v8::Isolate* isolate, v8::TryCatch& try_catch)
 
 int main(int argc, char* argv[])
 {
+    ProgramOptions Options;
+    try
+    {
+        Options = ParseProgramOptions(argc, argv);
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << ex.what() << std::endl;
+        return 1;
+    }
+
+    RegisterExampleBindings();
+
+    if (!Options.DtsOutputPath.empty())
+    {
+        std::string ErrorMessage;
+        if (!puerts::GenerateTypeScriptDeclarationToFile(Options.DtsOutputPath, &ErrorMessage))
+        {
+            std::cerr << ErrorMessage << std::endl;
+            return 1;
+        }
+        std::cout << "generated declaration: " << Options.DtsOutputPath << std::endl;
+    }
+
+    if (Options.DtsOnly)
+    {
+        return 0;
+    }
+
     // Initialize V8.
     v8::Platform* platform = v8::platform::NewDefaultPlatform_Without_Stl();
     v8::V8::InitializePlatform(platform);
@@ -161,7 +253,9 @@ int main(int argc, char* argv[])
     create_params.array_buffer_allocator =
         v8::ArrayBuffer::Allocator::NewDefaultAllocator();
     v8::Isolate* isolate = v8::Isolate::New(create_params);
-    
+    int ExitCode = 0;
+    bool ShouldRunScript = true;
+
     puerts::FCppObjectMapper cppObjectMapper;
     {
         v8::Isolate::Scope isolate_scope(isolate);
@@ -191,74 +285,45 @@ int main(int argc, char* argv[])
                     .ToLocalChecked())
             .Check();
 
-        puerts::DefineClass<TestClass>()
-            .Constructor<int>()
-            .Function("Print", MakeFunction(&TestClass::Print))
-            .Function("GetCreatedCount", MakeFunction(&TestClass::GetCreatedCount))
-            .Function("AddAll", MakeFunction(&TestClass::AddAll))
-            .Property("X", MakeProperty(&TestClass::X))
-            .Method("Add", MakeFunction(&TestClass::Add))
-            .Method("SetX", MakeFunction(&TestClass::SetX))
-            .Method("Scale", MakeFunction(&TestClass::Scale))
-            .Method("Describe", MakeFunction(&TestClass::Describe))
-            .Register();
-
-        try
+        if (ShouldRunScript)
         {
-            const std::string script_path = ResolveScriptPath(argc, argv);
-            const std::string script_source = ReadTextFile(script_path);
-            if (script_source.empty())
+            try
             {
-                std::cerr << "script file is empty: " << script_path << std::endl;
-                cppObjectMapper.UnInitialize(isolate);
-                isolate->Dispose();
-                v8::V8::Dispose();
-                v8::V8::DisposePlatform();
-                v8::platform::DeletePlatform_Without_Stl(platform);
-                delete create_params.array_buffer_allocator;
-                return 1;
+                const std::string script_path = Options.ScriptPath.empty() ? ResolveScriptPath() : Options.ScriptPath;
+                const std::string script_source = ReadTextFile(script_path);
+                if (script_source.empty())
+                {
+                    std::cerr << "script file is empty: " << script_path << std::endl;
+                    ExitCode = 1;
+                }
+                else
+                {
+                    v8::TryCatch try_catch(isolate);
+                    auto source = v8::String::NewFromUtf8(isolate, script_source.c_str()).ToLocalChecked();
+                    auto name = v8::String::NewFromUtf8(isolate, script_path.c_str()).ToLocalChecked();
+                    v8::ScriptOrigin origin(isolate, name);
+                    v8::Local<v8::Script> script;
+                    if (!v8::Script::Compile(context, source, &origin).ToLocal(&script))
+                    {
+                        ReportException(isolate, try_catch);
+                        ExitCode = 1;
+                    }
+                    else
+                    {
+                        v8::MaybeLocal<v8::Value> run_result = script->Run(context);
+                        if (run_result.IsEmpty())
+                        {
+                            ReportException(isolate, try_catch);
+                            ExitCode = 1;
+                        }
+                    }
+                }
             }
-
-            v8::TryCatch try_catch(isolate);
-            auto source = v8::String::NewFromUtf8(isolate, script_source.c_str()).ToLocalChecked();
-            auto name = v8::String::NewFromUtf8(isolate, script_path.c_str()).ToLocalChecked();
-            v8::ScriptOrigin origin(isolate, name);
-            v8::Local<v8::Script> script;
-            if (!v8::Script::Compile(context, source, &origin).ToLocal(&script))
+            catch (const std::exception& ex)
             {
-                ReportException(isolate, try_catch);
-                cppObjectMapper.UnInitialize(isolate);
-                isolate->Dispose();
-                v8::V8::Dispose();
-                v8::V8::DisposePlatform();
-                v8::platform::DeletePlatform_Without_Stl(platform);
-                delete create_params.array_buffer_allocator;
-                return 1;
+                std::cerr << ex.what() << std::endl;
+                ExitCode = 1;
             }
-
-            v8::MaybeLocal<v8::Value> run_result = script->Run(context);
-            if (run_result.IsEmpty())
-            {
-                ReportException(isolate, try_catch);
-                cppObjectMapper.UnInitialize(isolate);
-                isolate->Dispose();
-                v8::V8::Dispose();
-                v8::V8::DisposePlatform();
-                v8::platform::DeletePlatform_Without_Stl(platform);
-                delete create_params.array_buffer_allocator;
-                return 1;
-            }
-        }
-        catch (const std::exception& ex)
-        {
-            std::cerr << ex.what() << std::endl;
-            cppObjectMapper.UnInitialize(isolate);
-            isolate->Dispose();
-            v8::V8::Dispose();
-            v8::V8::DisposePlatform();
-            v8::platform::DeletePlatform_Without_Stl(platform);
-            delete create_params.array_buffer_allocator;
-            return 1;
         }
 
         cppObjectMapper.UnInitialize(isolate);
@@ -270,5 +335,5 @@ int main(int argc, char* argv[])
     v8::V8::DisposePlatform();
     v8::platform::DeletePlatform_Without_Stl(platform);
     delete create_params.array_buffer_allocator;
-    return 0;
+    return ExitCode;
 }

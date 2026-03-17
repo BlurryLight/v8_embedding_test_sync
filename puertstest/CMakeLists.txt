@@ -34,6 +34,7 @@ include_directories(
 )
 
 set ( SRC hello-world.cc 
+          puerts/src/DeclarationGenerator.cpp
           puerts/src/CppObjectMapper.cpp
           puerts/src/DataTransfer.cpp
           puerts/src/JSClassRegister.cpp
