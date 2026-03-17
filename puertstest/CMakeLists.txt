@@ -11,6 +11,7 @@ project(Helloworld)
 
 set (CMAKE_CXX_STANDARD 14)
 
+set (CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(JS_ENGINE_ROOT ${CMAKE_SOURCE_DIR}/../v8)
 

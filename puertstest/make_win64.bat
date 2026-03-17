@@ -4,6 +4,6 @@ if "%ENGINE%"=="" (
 )
 
 mkdir build64_%ENGINE% & pushd build64_%ENGINE%
-cmake -DJS_ENGINE=%ENGINE% -G "Visual Studio 16 2019" -A x64 ..
+cmake -DJS_ENGINE=%ENGINE% -GNinja ..
 popd
 cmake --build build64_%ENGINE% --config Release
