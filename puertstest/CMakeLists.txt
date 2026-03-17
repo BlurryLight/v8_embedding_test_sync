@@ -26,42 +26,6 @@ if(MSVC)
     endforeach()
 
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-
-    if(NOT DEFINED CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES)
-        get_filename_component(MSVC_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-        get_filename_component(MSVC_HOST_DIR "${MSVC_BIN_DIR}" DIRECTORY)
-        get_filename_component(MSVC_TOOLS_BIN_DIR "${MSVC_HOST_DIR}" DIRECTORY)
-        get_filename_component(MSVC_TOOLS_ROOT "${MSVC_TOOLS_BIN_DIR}" DIRECTORY)
-        get_filename_component(MSVC_VERSION_ROOT "${MSVC_TOOLS_ROOT}" DIRECTORY)
-        get_filename_component(MSVC_VC_ROOT "${MSVC_VERSION_ROOT}" DIRECTORY)
-        set(MSVC_INCLUDE_DIR "${MSVC_TOOLS_ROOT}/include")
-        set(MSVC_AUX_INCLUDE_DIR "${MSVC_VC_ROOT}/Auxiliary/VS/include")
-        set(MSVC_LIB_DIR "${MSVC_TOOLS_ROOT}/lib/x64")
-
-        get_filename_component(WINSDK_RC_DIR "${CMAKE_RC_COMPILER}" DIRECTORY)
-        get_filename_component(WINSDK_VER_DIR "${WINSDK_RC_DIR}" DIRECTORY)
-        get_filename_component(WINSDK_VERSION "${WINSDK_VER_DIR}" NAME)
-        get_filename_component(WINSDK_BIN_DIR "${WINSDK_VER_DIR}" DIRECTORY)
-        get_filename_component(WINSDK_ROOT "${WINSDK_BIN_DIR}" DIRECTORY)
-        set(WINSDK_INCLUDE_ROOT "${WINSDK_ROOT}/include/${WINSDK_VERSION}")
-        set(WINSDK_LIB_ROOT "${WINSDK_ROOT}/lib/${WINSDK_VERSION}")
-
-        set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES
-            "${MSVC_INCLUDE_DIR}"
-            "${MSVC_AUX_INCLUDE_DIR}"
-            "${WINSDK_INCLUDE_ROOT}/ucrt"
-            "${WINSDK_INCLUDE_ROOT}/um"
-            "${WINSDK_INCLUDE_ROOT}/shared"
-            "${WINSDK_INCLUDE_ROOT}/winrt"
-            "${WINSDK_INCLUDE_ROOT}/cppwinrt"
-        )
-        set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_C_STANDARD_INCLUDE_DIRECTORIES})
-        link_directories(
-            "${MSVC_LIB_DIR}"
-            "${WINSDK_LIB_ROOT}/ucrt/x64"
-            "${WINSDK_LIB_ROOT}/um/x64"
-        )
-    endif()
 endif()
 
 include_directories(
