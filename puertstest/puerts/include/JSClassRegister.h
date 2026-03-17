@@ -20,16 +20,29 @@
 
 #include <string>
 
+#include "NamespaceDef.h"
+#include "PString.h"
+
 #pragma warning(push, 0)
 #include "v8.h"
 #pragma warning(pop)
 
 #include "TypeInfo.hpp"
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 struct JSENV_API JSFunctionInfo
 {
+    JSFunctionInfo() : Name(nullptr), Callback(nullptr)
+    {
+    }
+
+    JSFunctionInfo(
+        const char* InName, v8::FunctionCallback InCallback, void* InData = nullptr, const CFunctionInfo* InReflectionInfo = nullptr)
+        : Name(InName), Callback(InCallback), Data(InData), ReflectionInfo(InReflectionInfo)
+    {
+    }
+
     const char* Name;
     v8::FunctionCallback Callback;
     void* Data = nullptr;
@@ -38,10 +51,21 @@ struct JSENV_API JSFunctionInfo
 
 struct JSENV_API JSPropertyInfo
 {
+    JSPropertyInfo() : Name(nullptr), Getter(nullptr), Setter(nullptr)
+    {
+    }
+
+    JSPropertyInfo(const char* InName, v8::FunctionCallback InGetter, v8::FunctionCallback InSetter, void* InGetterData = nullptr,
+        void* InSetterData = nullptr)
+        : Name(InName), Getter(InGetter), Setter(InSetter), GetterData(InGetterData), SetterData(InSetterData)
+    {
+    }
+
     const char* Name;
     v8::FunctionCallback Getter;
     v8::FunctionCallback Setter;
-    void* Data = nullptr;
+    void* GetterData = nullptr;
+    void* SetterData = nullptr;
 };
 
 typedef void (*FinalizeFunc)(void* Ptr);
@@ -59,6 +83,10 @@ struct NamedPropertyInfo
     const char* Name;
     const CTypeInfo* Type;
 };
+
+typedef bool (*ClassNotFoundCallback)(const void* TypeId);
+typedef void* (*ObjectEnterFunc)(void* Ptr, void* ClassData, void* EnvPrivateData);
+typedef void (*ObjectExitFunc)(void* Ptr, void* ClassData, void* EnvPrivateData, void* UserData);
 
 struct JSENV_API JSClassDefinition
 {
@@ -79,24 +107,35 @@ struct JSENV_API JSClassDefinition
     NamedPropertyInfo* PropertyInfos;
     NamedPropertyInfo* VariableInfos;
     void* Data = nullptr;
+    ObjectEnterFunc OnEnter = nullptr;
+    ObjectExitFunc OnExit = nullptr;
 };
 
 #define JSClassEmptyDefinition                      \
     {                                               \
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
     }
 
 void JSENV_API RegisterJSClass(const JSClassDefinition& ClassDefinition);
+
+void JSENV_API SetClassTypeInfo(const void* TypeId, const NamedFunctionInfo* ConstructorInfos, const NamedFunctionInfo* MethodInfos,
+    const NamedFunctionInfo* FunctionInfos, const NamedPropertyInfo* PropertyInfos, const NamedPropertyInfo* VariableInfos);
 
 void JSENV_API ForeachRegisterClass(std::function<void(const JSClassDefinition* ClassDefinition)>);
 
 JSENV_API const JSClassDefinition* FindClassByID(const void* TypeId);
 
-const JSClassDefinition* FindCppTypeClassByName(const std::string& Name);
+JSENV_API void OnClassNotFound(ClassNotFoundCallback Callback);
+
+JSENV_API const JSClassDefinition* LoadClassByID(const void* TypeId);
+
+const JSClassDefinition* FindCppTypeClassByName(const PString& Name);
+
+JSENV_API bool TraceObjectLifecycle(const void* TypeId, ObjectEnterFunc OnEnter, ObjectExitFunc OnExit);
 
 typedef void (*AddonRegisterFunc)(v8::Local<v8::Context> Context, v8::Local<v8::Object> Exports);
 
-AddonRegisterFunc FindAddonRegisterFunc(const std::string& Name);
+AddonRegisterFunc FindAddonRegisterFunc(const PString& Name);
 
 void RegisterAddon(const char* Name, AddonRegisterFunc RegisterFunc);
 
@@ -104,13 +143,13 @@ void RegisterAddon(const char* Name, AddonRegisterFunc RegisterFunc);
 JSENV_API const JSClassDefinition* FindClassByType(UStruct* Type);
 #endif
 
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE
 
 #define PUERTS_MODULE(Name, RegFunc)                 \
     static struct FAutoRegisterFor##Name             \
     {                                                \
         FAutoRegisterFor##Name()                     \
         {                                            \
-            puerts::RegisterAddon(#Name, (RegFunc)); \
+            PUERTS_NAMESPACE::RegisterAddon(#Name, (RegFunc)); \
         }                                            \
     } _AutoRegisterFor##Name

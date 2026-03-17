@@ -8,37 +8,49 @@
 
 #pragma once
 
+#include "NamespaceDef.h"
+
+PRAGMA_DISABLE_UNDEFINED_IDENTIFIER_WARNINGS
 #pragma warning(push, 0)
 #include "v8.h"
 #pragma warning(pop)
+PRAGMA_ENABLE_UNDEFINED_IDENTIFIER_WARNINGS
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 class FObjectCacheNode
 {
 public:
-    V8_INLINE FObjectCacheNode(const void* TypeId_) : TypeId(TypeId_), Next(nullptr)
+    V8_INLINE FObjectCacheNode(const void* TypeId_) : TypeId(TypeId_), UserData(nullptr), Next(nullptr), MustCallFinalize(false)
     {
     }
 
-    V8_INLINE FObjectCacheNode(const void* TypeId_, FObjectCacheNode* Next_) : TypeId(TypeId_), Next(Next_)
+    V8_INLINE FObjectCacheNode(const void* TypeId_, FObjectCacheNode* Next_)
+        : TypeId(TypeId_), UserData(nullptr), Next(Next_), MustCallFinalize(false)
     {
     }
 
     V8_INLINE FObjectCacheNode(FObjectCacheNode&& other) noexcept
-        : TypeId(other.TypeId), Next(other.Next), Value(std::move(other.Value))
+        : TypeId(other.TypeId), UserData(other.UserData), Next(other.Next), Value(std::move(other.Value)),
+          MustCallFinalize(other.MustCallFinalize)
     {
         other.TypeId = nullptr;
+        other.UserData = nullptr;
         other.Next = nullptr;
+        other.MustCallFinalize = false;
     }
 
     V8_INLINE FObjectCacheNode& operator=(FObjectCacheNode&& rhs) noexcept
     {
         TypeId = rhs.TypeId;
+        UserData = rhs.UserData;
         Next = rhs.Next;
         Value = std::move(rhs.Value);
+        MustCallFinalize = rhs.MustCallFinalize;
         rhs.TypeId = nullptr;
+        rhs.UserData = nullptr;
         rhs.Next = nullptr;
+        rhs.MustCallFinalize = false;
         return *this;
     }
 
@@ -104,12 +116,16 @@ public:
 
     const void* TypeId;
 
+    void* UserData;
+
     FObjectCacheNode* Next;
 
     v8::UniquePersistent<v8::Value> Value;
+
+    bool MustCallFinalize;
 
     FObjectCacheNode(const FObjectCacheNode&) = delete;
     void operator=(const FObjectCacheNode&) = delete;
 };
 
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE

@@ -15,9 +15,17 @@
 #include "JSClassRegister.h"
 #endif
 
+#include "NamespaceDef.h"
+
+#if !defined(FORCEINLINE)
+#define FORCEINLINE V8_INLINE
+#endif
+
+PRAGMA_DISABLE_UNDEFINED_IDENTIFIER_WARNINGS
 #pragma warning(push, 0)
 #include "v8.h"
 #pragma warning(pop)
+PRAGMA_ENABLE_UNDEFINED_IDENTIFIER_WARNINGS
 
 #if !defined(MAPPER_ISOLATE_DATA_POS)
 #define MAPPER_ISOLATE_DATA_POS 0
@@ -26,7 +34,7 @@
 #define RELEASED_UOBJECT ((UObject*) 12)
 #define RELEASED_UOBJECT_MEMBER ((void*) 12)
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 template <typename T, typename FT, typename = void>
 struct TOuterLinker
@@ -263,10 +271,20 @@ public:
         return static_cast<T*>(Isolate->GetData(MAPPER_ISOLATE_DATA_POS));
     }
 
+    FORCEINLINE static void* GetIsolatePrivateData(v8::Isolate* Isolate)
+    {
+        return Isolate->GetData(MAPPER_ISOLATE_DATA_POS + 1);
+    }
+
+    FORCEINLINE static void SetIsolatePrivateData(v8::Isolate* Isolate, void* PrivateData)
+    {
+        Isolate->SetData(MAPPER_ISOLATE_DATA_POS + 1, PrivateData);
+    }
+
     static v8::Local<v8::Value> FindOrAddCData(
         v8::Isolate* Isolate, v8::Local<v8::Context> Context, const void* TypeId, const void* Ptr, bool PassByPointer);
 
-    static bool IsInstanceOf(v8::Isolate* Isolate, const void* TypeId, v8::Local<v8::Object> JsObject);
+    static bool IsInstanceOf(v8::Isolate* Isolate, const void* TypeId, v8::Local<v8::Value> JsObject);
 
     static v8::Local<v8::Value> UnRef(v8::Isolate* Isolate, const v8::Local<v8::Value>& Value);
 
@@ -294,12 +312,12 @@ public:
         v8::Isolate* Isolate, v8::Local<v8::Context> Context, UScriptStruct* ScriptStruct, void* Ptr, bool PassByPointer);
 
     template <typename T>
-    static bool IsInstanceOf(v8::Isolate* Isolate, v8::Local<v8::Object> JsObject)
+    static bool IsInstanceOf(v8::Isolate* Isolate, v8::Local<v8::Value> JsObject)
     {
         return IsInstanceOf(Isolate, TScriptStructTraits<T>::Get(), JsObject);
     }
 
-    static bool IsInstanceOf(v8::Isolate* Isolate, UStruct* Struct, v8::Local<v8::Object> JsObject);
+    static bool IsInstanceOf(v8::Isolate* Isolate, UStruct* Struct, v8::Local<v8::Value> JsObject);
 
     static FString ToFString(v8::Isolate* Isolate, v8::Local<v8::Value> Value);
 
@@ -312,4 +330,4 @@ public:
         TOuterLinker<T1, T2>::Link(Context, Outer, Inner);
     }
 };
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE

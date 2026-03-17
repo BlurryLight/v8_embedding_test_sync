@@ -10,9 +10,10 @@
 #if USING_IN_UNREAL_ENGINE
 #include "UObject/Class.h"
 #endif
+#include <cstring>
 #include <map>
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 template <class T>
 static T* PropertyInfoDuplicate(T* Arr)
@@ -20,7 +21,6 @@ static T* PropertyInfoDuplicate(T* Arr)
     if (Arr == nullptr)
         return nullptr;
     int Count = 0;
-    ;
     while (true)
     {
         if (Arr[Count++].Name == nullptr)
@@ -31,7 +31,7 @@ static T* PropertyInfoDuplicate(T* Arr)
     return Ret;
 }
 
-JSClassDefinition* JSClassDefinitionDuplicate(const JSClassDefinition* ClassDefinition)
+static JSClassDefinition* JSClassDefinitionDuplicate(const JSClassDefinition* ClassDefinition)
 {
     auto Ret = new JSClassDefinition;
     ::memcpy(Ret, ClassDefinition, sizeof(JSClassDefinition));
@@ -47,7 +47,7 @@ JSClassDefinition* JSClassDefinitionDuplicate(const JSClassDefinition* ClassDefi
     return Ret;
 }
 
-void JSClassDefinitionDelete(JSClassDefinition* ClassDefinition)
+static void JSClassDefinitionDelete(JSClassDefinition* ClassDefinition)
 {
     delete[] ClassDefinition->Methods;
     delete[] ClassDefinition->Functions;
@@ -64,155 +64,149 @@ void JSClassDefinitionDelete(JSClassDefinition* ClassDefinition)
 class JSClassRegister
 {
 public:
-    JSClassRegister();
-    ~JSClassRegister();
+    ~JSClassRegister()
+    {
+        for (auto& KV : CDataIdToClassDefinition)
+        {
+            JSClassDefinitionDelete(KV.second);
+        }
+        CDataIdToClassDefinition.clear();
+#if USING_IN_UNREAL_ENGINE
+        for (auto& KV : StructNameToClassDefinition)
+        {
+            JSClassDefinitionDelete(KV.second);
+        }
+        StructNameToClassDefinition.clear();
+#endif
+    }
 
-    void RegisterClass(const JSClassDefinition& ClassDefinition);
+    void RegisterClass(const JSClassDefinition& ClassDefinition)
+    {
+        if (ClassDefinition.TypeId && ClassDefinition.ScriptName)
+        {
+            auto Iter = CDataIdToClassDefinition.find(ClassDefinition.TypeId);
+            if (Iter != CDataIdToClassDefinition.end())
+            {
+                JSClassDefinitionDelete(Iter->second);
+            }
+            CDataIdToClassDefinition[ClassDefinition.TypeId] = JSClassDefinitionDuplicate(&ClassDefinition);
+            PString SN = ClassDefinition.ScriptName;
+            CDataNameToClassDefinition[SN] = CDataIdToClassDefinition[ClassDefinition.TypeId];
+            CDataIdToClassDefinition[ClassDefinition.TypeId]->ScriptName = CDataNameToClassDefinition.find(SN)->first.c_str();
+        }
+#if USING_IN_UNREAL_ENGINE
+        else if (ClassDefinition.UETypeName)
+        {
+            FString SN = UTF8_TO_TCHAR(ClassDefinition.UETypeName);
+            auto Iter = StructNameToClassDefinition.find(SN);
+            if (Iter != StructNameToClassDefinition.end())
+            {
+                JSClassDefinitionDelete(Iter->second);
+            }
+            StructNameToClassDefinition[SN] = JSClassDefinitionDuplicate(&ClassDefinition);
+        }
+#endif
+    }
 
-    void ForeachRegisterClass(std::function<void(const JSClassDefinition* ClassDefinition)>);
+    void SetClassTypeInfo(const void* TypeId, const NamedFunctionInfo* ConstructorInfos, const NamedFunctionInfo* MethodInfos,
+        const NamedFunctionInfo* FunctionInfos, const NamedPropertyInfo* PropertyInfos, const NamedPropertyInfo* VariableInfos)
+    {
+        auto ClassDef = const_cast<JSClassDefinition*>(FindClassByID(TypeId));
+        if (!ClassDef)
+        {
+            return;
+        }
+        delete[] ClassDef->ConstructorInfos;
+        delete[] ClassDef->MethodInfos;
+        delete[] ClassDef->FunctionInfos;
+        delete[] ClassDef->PropertyInfos;
+        delete[] ClassDef->VariableInfos;
+        ClassDef->ConstructorInfos = PropertyInfoDuplicate(const_cast<NamedFunctionInfo*>(ConstructorInfos));
+        ClassDef->MethodInfos = PropertyInfoDuplicate(const_cast<NamedFunctionInfo*>(MethodInfos));
+        ClassDef->FunctionInfos = PropertyInfoDuplicate(const_cast<NamedFunctionInfo*>(FunctionInfos));
+        ClassDef->PropertyInfos = PropertyInfoDuplicate(const_cast<NamedPropertyInfo*>(PropertyInfos));
+        ClassDef->VariableInfos = PropertyInfoDuplicate(const_cast<NamedPropertyInfo*>(VariableInfos));
+    }
 
-    const JSClassDefinition* FindClassByID(const void* TypeId);
+    void ForeachRegisterClass(std::function<void(const JSClassDefinition* ClassDefinition)> Callback)
+    {
+        for (auto& KV : CDataNameToClassDefinition)
+        {
+            Callback(KV.second);
+        }
+#if USING_IN_UNREAL_ENGINE
+        for (auto& KV : StructNameToClassDefinition)
+        {
+            Callback(KV.second);
+        }
+#endif
+    }
 
-    const JSClassDefinition* FindCppTypeClassByName(const std::string& Name);
+    const JSClassDefinition* FindClassByID(const void* TypeId)
+    {
+        if (!TypeId)
+        {
+            return nullptr;
+        }
+        auto Iter = CDataIdToClassDefinition.find(TypeId);
+        return Iter == CDataIdToClassDefinition.end() ? nullptr : Iter->second;
+    }
 
-    void RegisterAddon(const std::string& Name, AddonRegisterFunc RegisterFunc);
+    void OnClassNotFound(ClassNotFoundCallback InCallback)
+    {
+        ClassNotFound = InCallback;
+    }
 
-    AddonRegisterFunc FindAddonRegisterFunc(const std::string& Name);
+    const JSClassDefinition* LoadClassByID(const void* TypeId)
+    {
+        auto ClassDef = FindClassByID(TypeId);
+        if (!ClassDef && ClassNotFound)
+        {
+            if (!ClassNotFound(TypeId))
+            {
+                return nullptr;
+            }
+            ClassDef = FindClassByID(TypeId);
+        }
+        return ClassDef;
+    }
+
+    const JSClassDefinition* FindCppTypeClassByName(const PString& Name)
+    {
+        auto Iter = CDataNameToClassDefinition.find(Name);
+        return Iter == CDataNameToClassDefinition.end() ? nullptr : Iter->second;
+    }
+
+    void RegisterAddon(const PString& Name, AddonRegisterFunc RegisterFunc)
+    {
+        AddonRegisterInfos[Name] = RegisterFunc;
+    }
+
+    AddonRegisterFunc FindAddonRegisterFunc(const PString& Name)
+    {
+        auto Iter = AddonRegisterInfos.find(Name);
+        return Iter == AddonRegisterInfos.end() ? nullptr : Iter->second;
+    }
 
 #if USING_IN_UNREAL_ENGINE
-    const JSClassDefinition* FindClassByType(UStruct* Type);
+    const JSClassDefinition* FindClassByType(UStruct* Type)
+    {
+        auto Iter = StructNameToClassDefinition.find(Type->GetName());
+        return Iter == StructNameToClassDefinition.end() ? nullptr : Iter->second;
+    }
 #endif
 
 private:
     std::map<const void*, JSClassDefinition*> CDataIdToClassDefinition;
-    std::map<std::string, JSClassDefinition*> CDataNameToClassDefinition;
-    std::map<std::string, AddonRegisterFunc> AddonRegisterInfos;
+    std::map<PString, JSClassDefinition*> CDataNameToClassDefinition;
+    ClassNotFoundCallback ClassNotFound = nullptr;
+    std::map<PString, AddonRegisterFunc> AddonRegisterInfos;
 #if USING_IN_UNREAL_ENGINE
     std::map<FString, JSClassDefinition*> StructNameToClassDefinition;
 #endif
 };
 
-JSClassRegister::JSClassRegister()
-{
-}
-
-JSClassRegister::~JSClassRegister()
-{
-    for (auto& KV : CDataIdToClassDefinition)
-    {
-        JSClassDefinitionDelete(KV.second);
-    }
-    CDataIdToClassDefinition.clear();
-#if USING_IN_UNREAL_ENGINE
-    for (auto& KV : StructNameToClassDefinition)
-    {
-        JSClassDefinitionDelete(KV.second);
-    }
-    StructNameToClassDefinition.clear();
-#endif
-}
-
-void JSClassRegister::RegisterClass(const JSClassDefinition& ClassDefinition)
-{
-    if (ClassDefinition.TypeId && ClassDefinition.ScriptName)
-    {
-        auto cd_iter = CDataIdToClassDefinition.find(ClassDefinition.TypeId);
-        if (cd_iter != CDataIdToClassDefinition.end())
-        {
-            JSClassDefinitionDelete(cd_iter->second);
-        }
-        CDataIdToClassDefinition[ClassDefinition.TypeId] = JSClassDefinitionDuplicate(&ClassDefinition);
-        std::string SN = ClassDefinition.ScriptName;
-        CDataNameToClassDefinition[SN] = CDataIdToClassDefinition[ClassDefinition.TypeId];
-    }
-#if USING_IN_UNREAL_ENGINE
-    else if (ClassDefinition.UETypeName)
-    {
-        FString SN = UTF8_TO_TCHAR(ClassDefinition.UETypeName);
-        auto ud_iter = StructNameToClassDefinition.find(SN);
-        if (ud_iter != StructNameToClassDefinition.end())
-        {
-            JSClassDefinitionDelete(ud_iter->second);
-        }
-        StructNameToClassDefinition[SN] = JSClassDefinitionDuplicate(&ClassDefinition);
-    }
-#endif
-}
-
-const JSClassDefinition* JSClassRegister::FindClassByID(const void* TypeId)
-{
-    auto Iter = CDataIdToClassDefinition.find(TypeId);
-    if (Iter == CDataIdToClassDefinition.end())
-    {
-        return nullptr;
-    }
-    else
-    {
-        return Iter->second;
-    }
-}
-
-const JSClassDefinition* JSClassRegister::FindCppTypeClassByName(const std::string& Name)
-{
-    auto Iter = CDataNameToClassDefinition.find(Name);
-    if (Iter == CDataNameToClassDefinition.end())
-    {
-        return nullptr;
-    }
-    else
-    {
-        return Iter->second;
-    }
-}
-
-void JSClassRegister::RegisterAddon(const std::string& Name, AddonRegisterFunc RegisterFunc)
-{
-    AddonRegisterInfos[Name] = RegisterFunc;
-}
-
-AddonRegisterFunc JSClassRegister::FindAddonRegisterFunc(const std::string& Name)
-{
-    auto Iter = AddonRegisterInfos.find(Name);
-    if (Iter == AddonRegisterInfos.end())
-    {
-        return nullptr;
-    }
-    else
-    {
-        return Iter->second;
-    }
-}
-
-#if USING_IN_UNREAL_ENGINE
-const JSClassDefinition* JSClassRegister::FindClassByType(UStruct* Type)
-{
-    auto Iter = StructNameToClassDefinition.find(Type->GetName());
-    if (Iter == StructNameToClassDefinition.end())
-    {
-        return nullptr;
-    }
-    else
-    {
-        return Iter->second;
-    }
-}
-#endif
-
-void JSClassRegister::ForeachRegisterClass(std::function<void(const JSClassDefinition* ClassDefinition)> Callback)
-{
-    for (auto& KV : CDataNameToClassDefinition)
-    {
-        Callback(KV.second);
-    }
-#if USING_IN_UNREAL_ENGINE
-    for (auto& KV : StructNameToClassDefinition)
-    {
-        Callback(KV.second);
-    }
-#endif
-}
-
-JSClassRegister* GetJSClassRegister()
+static JSClassRegister* GetJSClassRegister()
 {
     static JSClassRegister S_JSClassRegister;
     return &S_JSClassRegister;
@@ -221,6 +215,12 @@ JSClassRegister* GetJSClassRegister()
 void RegisterJSClass(const JSClassDefinition& ClassDefinition)
 {
     GetJSClassRegister()->RegisterClass(ClassDefinition);
+}
+
+void SetClassTypeInfo(const void* TypeId, const NamedFunctionInfo* ConstructorInfos, const NamedFunctionInfo* MethodInfos,
+    const NamedFunctionInfo* FunctionInfos, const NamedPropertyInfo* PropertyInfos, const NamedPropertyInfo* VariableInfos)
+{
+    GetJSClassRegister()->SetClassTypeInfo(TypeId, ConstructorInfos, MethodInfos, FunctionInfos, PropertyInfos, VariableInfos);
 }
 
 void ForeachRegisterClass(std::function<void(const JSClassDefinition* ClassDefinition)> Callback)
@@ -233,9 +233,30 @@ const JSClassDefinition* FindClassByID(const void* TypeId)
     return GetJSClassRegister()->FindClassByID(TypeId);
 }
 
-const JSClassDefinition* FindCppTypeClassByName(const std::string& Name)
+void OnClassNotFound(ClassNotFoundCallback Callback)
+{
+    GetJSClassRegister()->OnClassNotFound(Callback);
+}
+
+const JSClassDefinition* LoadClassByID(const void* TypeId)
+{
+    return GetJSClassRegister()->LoadClassByID(TypeId);
+}
+
+const JSClassDefinition* FindCppTypeClassByName(const PString& Name)
 {
     return GetJSClassRegister()->FindCppTypeClassByName(Name);
+}
+
+bool TraceObjectLifecycle(const void* TypeId, ObjectEnterFunc OnEnter, ObjectExitFunc OnExit)
+{
+    if (auto ClassDef = const_cast<JSClassDefinition*>(GetJSClassRegister()->FindClassByID(TypeId)))
+    {
+        ClassDef->OnEnter = OnEnter;
+        ClassDef->OnExit = OnExit;
+        return true;
+    }
+    return false;
 }
 
 void RegisterAddon(const char* Name, AddonRegisterFunc RegisterFunc)
@@ -243,7 +264,7 @@ void RegisterAddon(const char* Name, AddonRegisterFunc RegisterFunc)
     GetJSClassRegister()->RegisterAddon(Name, RegisterFunc);
 }
 
-AddonRegisterFunc FindAddonRegisterFunc(const std::string& Name)
+AddonRegisterFunc FindAddonRegisterFunc(const PString& Name)
 {
     return GetJSClassRegister()->FindAddonRegisterFunc(Name);
 }
@@ -255,4 +276,4 @@ const JSClassDefinition* FindClassByType(UStruct* Type)
 }
 #endif
 
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE

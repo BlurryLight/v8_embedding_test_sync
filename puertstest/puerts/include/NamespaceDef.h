@@ -9,6 +9,7 @@
 #pragma once
 
 #include "PuertsNamespaceDef.h"
-#include "StaticCall.hpp"
-#include "ScriptBackend.hpp"
-#include "Object.hpp"
+
+#if defined(WITH_QJS_NAMESPACE_SUFFIX)
+namespace v8 = v8_qjs;
+#endif

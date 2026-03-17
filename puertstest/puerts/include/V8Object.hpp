@@ -34,7 +34,7 @@ static void REPORT_EXCEPTION(v8::Isolate* Isolate, v8::TryCatch* TC)
 class Object
 {
 public:
-    Object()
+    Object() : Isolate(nullptr)
     {
     }
 
@@ -71,8 +71,8 @@ public:
     {
         if (JsEnvLifeCycleTracker.expired())
         {
-            GObject.Empty();
-            GContext.Empty();
+            GObject.Reset();
+            GContext.Reset();
         }
     }
 
