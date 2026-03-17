@@ -1,3 +1,5 @@
+// @ts-ignore
+// import * as cpp from "cpp";
 const TestClass = loadCppType("TestClass");
 
 function assert(condition, message) {

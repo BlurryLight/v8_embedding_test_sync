@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -106,14 +107,48 @@ static std::string ReadTextFile(const std::string& path)
 
 static std::string ResolveScriptPath()
 {
+    namespace fs = std::filesystem;
+
+    const std::vector<fs::path> script_candidates = {
+        fs::path("JavaScript") / "hello-world.js",
+    };
+
+    auto is_project_root = [](const fs::path& dir) {
+        return fs::exists(dir / "CMakeLists.txt") && fs::exists(dir / "puerts") &&
+               (fs::exists(dir / "JavaScript") || fs::exists(dir / "Javascript"));
+    };
+
+    fs::path project_root;
+    fs::path cursor = fs::current_path();
+    while (true)
+    {
+        if (is_project_root(cursor))
+        {
+            project_root = cursor;
+            break;
+        }
+        if (!cursor.has_parent_path() || cursor.parent_path() == cursor)
+        {
+            break;
+        }
+        cursor = cursor.parent_path();
+    }
+
     std::vector<std::string> candidates;
-    candidates.emplace_back("hello-world.ts");
-    candidates.emplace_back("./hello-world.ts");
-    candidates.emplace_back("../hello-world.ts");
-    candidates.emplace_back("../../hello-world.ts");
-    candidates.emplace_back(".\\hello-world.ts");
-    candidates.emplace_back("..\\hello-world.ts");
-    candidates.emplace_back("..\\..\\hello-world.ts");
+    if (!project_root.empty())
+    {
+        for (const auto& relative_path : script_candidates)
+        {
+            candidates.emplace_back((project_root / relative_path).string());
+        }
+    }
+    else
+    {
+        for (const auto& relative_path : script_candidates)
+        {
+            candidates.emplace_back(relative_path.string());
+        }
+    }
 
     for (const auto& candidate : candidates)
     {

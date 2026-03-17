@@ -1,8 +1,5 @@
 declare module "cpp" {
-    import * as UE from "ue"
     import * as cpp from "cpp"
-    import {$Ref, $Nullable, cstring} from "puerts"
-
     class TestClass {
         constructor(p0: number);
         X: number;
