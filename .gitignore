@@ -8,3 +8,4 @@ puertstest/build_linux_Debug
 puertstest/build_linux_*
 v8Debug
 v8Release
+puertstest/node_modules
