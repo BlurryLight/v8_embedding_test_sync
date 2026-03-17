@@ -2,13 +2,14 @@ cmake_minimum_required(VERSION 3.16)
 
 project(Helloworld)
 
-set (CMAKE_CXX_STANDARD 14)
+set (CMAKE_CXX_STANDARD 17)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
 set (CMAKE_CXX_EXTENSIONS OFF)
 
 set (CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(JS_ENGINE_ROOT ${CMAKE_SOURCE_DIR}/../v8)
+set(LIB_NAME wee8)
 
 if(MSVC)
     foreach(flag_var
@@ -42,8 +43,6 @@ set ( SRC hello-world.cc
 
 add_executable(helloworld ${SRC})
 
-set (LIB_NAME wee8)
-
 if ( ANDROID )
     find_library(log-lib log )
 
@@ -73,14 +72,39 @@ elseif ( APPLE )
         target_compile_definitions (helloworld PRIVATE PLATFORM_MAC)
     endif ( )
 elseif (UNIX)
-    target_link_libraries(helloworld
-        ${JS_ENGINE_ROOT}/Lib/Linux/lib${LIB_NAME}.a
-	    pthread
-    )
+    set(V8_STATIC_LIBRARY ${JS_ENGINE_ROOT}/Lib/Linux/lib${LIB_NAME}.a)
+    set(V8_DYNAMIC_LIBRARY_DIR "")
+
+    if(EXISTS "${JS_ENGINE_ROOT}/Lib/LinuxDynamic/Linux/libv8.so")
+        set(V8_DYNAMIC_LIBRARY_DIR ${JS_ENGINE_ROOT}/Lib/LinuxDynamic/Linux)
+    elseif(EXISTS "${JS_ENGINE_ROOT}/Lib/LinuxDynamic/libv8.so")
+        set(V8_DYNAMIC_LIBRARY_DIR ${JS_ENGINE_ROOT}/Lib/LinuxDynamic)
+    endif()
+
+    if(EXISTS "${V8_STATIC_LIBRARY}")
+        target_link_libraries(helloworld
+            ${V8_STATIC_LIBRARY}
+            pthread
+        )
+    elseif(V8_DYNAMIC_LIBRARY_DIR)
+        target_link_directories(helloworld PRIVATE ${V8_DYNAMIC_LIBRARY_DIR})
+        target_link_libraries(helloworld
+            v8
+            v8_libplatform
+            pthread
+            dl
+        )
+        set_target_properties(helloworld PROPERTIES
+            BUILD_RPATH "${V8_DYNAMIC_LIBRARY_DIR}"
+        )
+    else()
+        message(FATAL_ERROR
+            "Linux V8 libraries not found. Expected either ${V8_STATIC_LIBRARY} or libv8.so under "
+            "${JS_ENGINE_ROOT}/Lib/LinuxDynamic[/Linux]."
+        )
+    endif()
+
     target_compile_definitions (helloworld PRIVATE PLATFORM_LINUX)
-    set(CMAKE_CXX_COMPILER "clang++")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++ -lc++abi")
 else ()
     if ( JS_ENGINE STREQUAL "v8")
         set(LIBS_NEEDED winmm.lib dbghelp.lib shlwapi.lib)

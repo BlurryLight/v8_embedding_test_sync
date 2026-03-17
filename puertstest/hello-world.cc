@@ -108,6 +108,9 @@ static std::string ResolveScriptPath()
 {
     std::vector<std::string> candidates;
     candidates.emplace_back("hello-world.ts");
+    candidates.emplace_back("./hello-world.ts");
+    candidates.emplace_back("../hello-world.ts");
+    candidates.emplace_back("../../hello-world.ts");
     candidates.emplace_back(".\\hello-world.ts");
     candidates.emplace_back("..\\hello-world.ts");
     candidates.emplace_back("..\\..\\hello-world.ts");

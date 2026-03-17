@@ -54,13 +54,13 @@ public:
         return *this;
     }
 
-    V8_INLINE ~FObjectCacheNode()
+    ~FObjectCacheNode()
     {
         if (Next)
             delete Next;
     }
 
-    V8_INLINE FObjectCacheNode* Find(const void* TypeId_)
+    FObjectCacheNode* Find(const void* TypeId_)
     {
         if (TypeId_ == TypeId)
         {
@@ -73,7 +73,7 @@ public:
         return nullptr;
     }
 
-    V8_INLINE FObjectCacheNode* Remove(const void* TypeId_, bool IsHead)
+    FObjectCacheNode* Remove(const void* TypeId_, bool IsHead)
     {
         if (TypeId_ == TypeId)
         {
@@ -108,7 +108,7 @@ public:
         return nullptr;
     }
 
-    V8_INLINE FObjectCacheNode* Add(const void* TypeId_)
+    FObjectCacheNode* Add(const void* TypeId_)
     {
         Next = new FObjectCacheNode(TypeId_, Next);
         return Next;
