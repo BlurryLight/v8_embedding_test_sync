@@ -2,3 +2,9 @@ v8_11.8.172
 v8
 puertstest/build64_v8
 puertstest/build_linux
+.vscode
+build
+puertstest/build_linux_Debug
+puertstest/build_linux_*
+v8Debug
+v8Release

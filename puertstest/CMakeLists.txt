@@ -74,17 +74,60 @@ elseif ( APPLE )
 elseif (UNIX)
     set(V8_STATIC_LIBRARY ${JS_ENGINE_ROOT}/Lib/Linux/lib${LIB_NAME}.a)
     set(V8_DYNAMIC_LIBRARY_DIR "")
+    set(V8_DEBUG_DYNAMIC_LIBRARY_DIR "")
+    set(V8_RELEASE_DYNAMIC_LIBRARY_DIR "")
+    set(V8_USE_CONFIG_MATCHED_DYNAMIC_LIBS OFF)
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/../v8Debug/Lib/Linux/libv8.so")
+        set(V8_DEBUG_DYNAMIC_LIBRARY_DIR ${CMAKE_SOURCE_DIR}/../v8Debug/Lib/Linux)
+    endif()
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/../v8Release/Lib/Linux/libv8.so")
+        set(V8_RELEASE_DYNAMIC_LIBRARY_DIR ${CMAKE_SOURCE_DIR}/../v8Release/Lib/Linux)
+    endif()
 
     if(EXISTS "${JS_ENGINE_ROOT}/Lib/LinuxDynamic/Linux/libv8.so")
         set(V8_DYNAMIC_LIBRARY_DIR ${JS_ENGINE_ROOT}/Lib/LinuxDynamic/Linux)
     elseif(EXISTS "${JS_ENGINE_ROOT}/Lib/LinuxDynamic/libv8.so")
         set(V8_DYNAMIC_LIBRARY_DIR ${JS_ENGINE_ROOT}/Lib/LinuxDynamic)
+    elseif(CMAKE_CONFIGURATION_TYPES AND V8_DEBUG_DYNAMIC_LIBRARY_DIR AND V8_RELEASE_DYNAMIC_LIBRARY_DIR)
+        set(V8_USE_CONFIG_MATCHED_DYNAMIC_LIBS ON)
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        if(V8_DEBUG_DYNAMIC_LIBRARY_DIR)
+            set(V8_DYNAMIC_LIBRARY_DIR ${V8_DEBUG_DYNAMIC_LIBRARY_DIR})
+        else()
+            message(FATAL_ERROR
+                "CMAKE_BUILD_TYPE=Debug requires libv8.so under ${CMAKE_SOURCE_DIR}/../v8Debug/Lib/Linux."
+            )
+        endif()
+    else()
+        if(V8_RELEASE_DYNAMIC_LIBRARY_DIR)
+            set(V8_DYNAMIC_LIBRARY_DIR ${V8_RELEASE_DYNAMIC_LIBRARY_DIR})
+        elseif(V8_DEBUG_DYNAMIC_LIBRARY_DIR)
+            message(FATAL_ERROR
+                "Non-Debug build requires libv8.so under ${CMAKE_SOURCE_DIR}/../v8Release/Lib/Linux."
+            )
+        endif()
     endif()
 
     if(EXISTS "${V8_STATIC_LIBRARY}")
         target_link_libraries(helloworld
             ${V8_STATIC_LIBRARY}
             pthread
+        )
+    elseif(V8_USE_CONFIG_MATCHED_DYNAMIC_LIBS)
+        target_link_directories(helloworld PRIVATE
+            $<$<CONFIG:Debug>:${V8_DEBUG_DYNAMIC_LIBRARY_DIR}>
+            $<$<NOT:$<CONFIG:Debug>>:${V8_RELEASE_DYNAMIC_LIBRARY_DIR}>
+        )
+        target_link_libraries(helloworld
+            v8
+            v8_libplatform
+            pthread
+            dl
+        )
+        set_target_properties(helloworld PROPERTIES
+            BUILD_RPATH "$<$<CONFIG:Debug>:${V8_DEBUG_DYNAMIC_LIBRARY_DIR}>;$<$<NOT:$<CONFIG:Debug>>:${V8_RELEASE_DYNAMIC_LIBRARY_DIR}>"
         )
     elseif(V8_DYNAMIC_LIBRARY_DIR)
         target_link_directories(helloworld PRIVATE ${V8_DYNAMIC_LIBRARY_DIR})
@@ -100,7 +143,9 @@ elseif (UNIX)
     else()
         message(FATAL_ERROR
             "Linux V8 libraries not found. Expected either ${V8_STATIC_LIBRARY} or libv8.so under "
-            "${JS_ENGINE_ROOT}/Lib/LinuxDynamic[/Linux]."
+            "${JS_ENGINE_ROOT}/Lib/LinuxDynamic[/Linux], "
+            "${CMAKE_SOURCE_DIR}/../v8Debug/Lib/Linux, or "
+            "${CMAKE_SOURCE_DIR}/../v8Release/Lib/Linux."
         )
     endif()
 
