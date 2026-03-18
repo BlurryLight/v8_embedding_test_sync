@@ -35,6 +35,7 @@ include_directories(
 )
 
 set(JSENV_SRC
+    hello-world-bindings.cc
     puerts/src/DeclarationGenerator.cpp
     puerts/src/CppObjectMapper.cpp
     puerts/src/DataTransfer.cpp
@@ -94,6 +95,9 @@ elseif (UNIX)
     set(V8_DEBUG_DYNAMIC_LIBRARY_DIR "")
     set(V8_RELEASE_DYNAMIC_LIBRARY_DIR "")
     set(V8_USE_CONFIG_MATCHED_DYNAMIC_LIBS OFF)
+    set(V8_LINK_LIBS pthread)
+    set(V8_LINK_DIRS "")
+    set(V8_BUILD_RPATH "")
 
     if(EXISTS "${CMAKE_SOURCE_DIR}/../v8Debug/Lib/Linux/libv8.so")
         set(V8_DEBUG_DYNAMIC_LIBRARY_DIR ${CMAKE_SOURCE_DIR}/../v8Debug/Lib/Linux)
@@ -128,35 +132,20 @@ elseif (UNIX)
     endif()
 
     if(EXISTS "${V8_STATIC_LIBRARY}")
-        target_link_libraries(jsenv
-            ${V8_STATIC_LIBRARY}
-            pthread
-        )
+        list(APPEND V8_LINK_LIBS ${V8_STATIC_LIBRARY})
     elseif(V8_USE_CONFIG_MATCHED_DYNAMIC_LIBS)
-        target_link_directories(jsenv PRIVATE
+        list(APPEND V8_LINK_LIBS v8 v8_libplatform dl)
+        list(APPEND V8_LINK_DIRS
             $<$<CONFIG:Debug>:${V8_DEBUG_DYNAMIC_LIBRARY_DIR}>
             $<$<NOT:$<CONFIG:Debug>>:${V8_RELEASE_DYNAMIC_LIBRARY_DIR}>
         )
-        target_link_libraries(jsenv
-            v8
-            v8_libplatform
-            pthread
-            dl
-        )
-        set_target_properties(jsenv PROPERTIES
-            BUILD_RPATH "$<$<CONFIG:Debug>:${V8_DEBUG_DYNAMIC_LIBRARY_DIR}>;$<$<NOT:$<CONFIG:Debug>>:${V8_RELEASE_DYNAMIC_LIBRARY_DIR}>"
+        set(V8_BUILD_RPATH
+            "$<$<CONFIG:Debug>:${V8_DEBUG_DYNAMIC_LIBRARY_DIR}>;$<$<NOT:$<CONFIG:Debug>>:${V8_RELEASE_DYNAMIC_LIBRARY_DIR}>"
         )
     elseif(V8_DYNAMIC_LIBRARY_DIR)
-        target_link_directories(jsenv PRIVATE ${V8_DYNAMIC_LIBRARY_DIR})
-        target_link_libraries(jsenv
-            v8
-            v8_libplatform
-            pthread
-            dl
-        )
-        set_target_properties(jsenv PROPERTIES
-            BUILD_RPATH "${V8_DYNAMIC_LIBRARY_DIR}"
-        )
+        list(APPEND V8_LINK_LIBS v8 v8_libplatform dl)
+        list(APPEND V8_LINK_DIRS ${V8_DYNAMIC_LIBRARY_DIR})
+        set(V8_BUILD_RPATH "${V8_DYNAMIC_LIBRARY_DIR}")
     else()
         message(FATAL_ERROR
             "Linux V8 libraries not found. Expected either ${V8_STATIC_LIBRARY} or libv8.so under "
@@ -164,6 +153,16 @@ elseif (UNIX)
             "${CMAKE_SOURCE_DIR}/../v8Debug/Lib/Linux, or "
             "${CMAKE_SOURCE_DIR}/../v8Release/Lib/Linux."
         )
+    endif()
+
+    target_link_libraries(jsenv PRIVATE ${V8_LINK_LIBS})
+
+    if(V8_LINK_DIRS)
+        target_link_directories(jsenv PRIVATE ${V8_LINK_DIRS})
+    endif()
+
+    if(V8_BUILD_RPATH)
+        set_target_properties(jsenv PROPERTIES BUILD_RPATH "${V8_BUILD_RPATH}")
     endif()
 
     target_compile_definitions (helloworld PRIVATE PLATFORM_LINUX)
