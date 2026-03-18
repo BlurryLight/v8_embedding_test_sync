@@ -12,6 +12,7 @@ struct JSENV_API ProgramOptions
     std::string ScriptPath;
     std::string DtsOutputPath;
     bool DtsOnly = false;
+    bool bSingleThreadPlatform = false;
 };
 
 using RegisterBindingsCallback = void (*)();

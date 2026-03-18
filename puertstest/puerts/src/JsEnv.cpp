@@ -361,7 +361,15 @@ int RunScriptProgram(const ProgramOptions& Options, RegisterBindingsCallback Reg
         return 0;
     }
 
-    v8::Platform* platform = v8::platform::NewDefaultPlatform_Without_Stl();
+    v8::Platform* platform = nullptr;
+    if(Options.bSingleThreadPlatform)
+    {
+        platform = v8::platform::NewSingleThreadedDefaultPlatform_Without_Stl();
+    }
+    else
+    {
+      platform = v8::platform::NewDefaultPlatform_Without_Stl();
+    }
     v8::V8::InitializePlatform(platform);
     v8::V8::Initialize();
 
