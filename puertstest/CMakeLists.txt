@@ -34,42 +34,59 @@ include_directories(
     puerts/include
 )
 
-set ( SRC hello-world.cc 
-          puerts/src/DeclarationGenerator.cpp
-          puerts/src/CppObjectMapper.cpp
-          puerts/src/DataTransfer.cpp
-          puerts/src/JSClassRegister.cpp
-          )
+set(JSENV_SRC
+    puerts/src/DeclarationGenerator.cpp
+    puerts/src/CppObjectMapper.cpp
+    puerts/src/DataTransfer.cpp
+    puerts/src/JSClassRegister.cpp
+    puerts/src/JsEnv.cpp
+)
 
-add_executable(helloworld ${SRC})
+add_library(jsenv SHARED ${JSENV_SRC})
+target_compile_definitions(jsenv PRIVATE JSENV_EXPORTS)
+target_include_directories(jsenv PUBLIC
+    ${JS_ENGINE_ROOT}/Inc
+    puerts/include
+)
+
+add_executable(helloworld hello-world.cc)
+target_link_libraries(helloworld PRIVATE jsenv)
+target_include_directories(helloworld PRIVATE
+    ${JS_ENGINE_ROOT}/Inc
+    puerts/include
+)
 
 if ( ANDROID )
     find_library(log-lib log )
 
     if( ANDROID_ABI STREQUAL "armeabi-v7a")
-        target_link_libraries(helloworld
+        target_link_libraries(jsenv
             ${JS_ENGINE_ROOT}/Lib/Android/armv7/lib${LIB_NAME}.a
             ${log-lib}
         )
         target_compile_definitions (helloworld PRIVATE PLATFORM_ANDROID_ARM)
+        target_compile_definitions (jsenv PRIVATE PLATFORM_ANDROID_ARM)
     else ( )
-        target_link_libraries(helloworld
+        target_link_libraries(jsenv
             ${JS_ENGINE_ROOT}/Lib/Android/arm64/lib${LIB_NAME}.a
             ${log-lib}
         )
         target_compile_definitions (helloworld PRIVATE PLATFORM_ANDROID_ARM64)
+        target_compile_definitions (jsenv PRIVATE PLATFORM_ANDROID_ARM64)
     endif ( )
 elseif ( APPLE )
     if (IOS)
-        target_link_libraries(helloworld
+        target_link_libraries(jsenv
             ${JS_ENGINE_ROOT}/Lib/iOS/lib${LIB_NAME}.a
         )
         target_compile_definitions (helloworld PRIVATE PLATFORM_IOS)
+        target_compile_definitions (jsenv PRIVATE PLATFORM_IOS)
     else ()
-        target_link_libraries(helloworld
+        target_link_libraries(jsenv
             ${JS_ENGINE_ROOT}/Lib/macOS/lib${LIB_NAME}.a
         )
         target_compile_definitions (helloworld PRIVATE PLATFORM_MAC)
+        target_compile_definitions (jsenv PRIVATE PLATFORM_MAC)
     endif ( )
 elseif (UNIX)
     set(V8_STATIC_LIBRARY ${JS_ENGINE_ROOT}/Lib/Linux/lib${LIB_NAME}.a)
@@ -111,33 +128,33 @@ elseif (UNIX)
     endif()
 
     if(EXISTS "${V8_STATIC_LIBRARY}")
-        target_link_libraries(helloworld
+        target_link_libraries(jsenv
             ${V8_STATIC_LIBRARY}
             pthread
         )
     elseif(V8_USE_CONFIG_MATCHED_DYNAMIC_LIBS)
-        target_link_directories(helloworld PRIVATE
+        target_link_directories(jsenv PRIVATE
             $<$<CONFIG:Debug>:${V8_DEBUG_DYNAMIC_LIBRARY_DIR}>
             $<$<NOT:$<CONFIG:Debug>>:${V8_RELEASE_DYNAMIC_LIBRARY_DIR}>
         )
-        target_link_libraries(helloworld
+        target_link_libraries(jsenv
             v8
             v8_libplatform
             pthread
             dl
         )
-        set_target_properties(helloworld PROPERTIES
+        set_target_properties(jsenv PROPERTIES
             BUILD_RPATH "$<$<CONFIG:Debug>:${V8_DEBUG_DYNAMIC_LIBRARY_DIR}>;$<$<NOT:$<CONFIG:Debug>>:${V8_RELEASE_DYNAMIC_LIBRARY_DIR}>"
         )
     elseif(V8_DYNAMIC_LIBRARY_DIR)
-        target_link_directories(helloworld PRIVATE ${V8_DYNAMIC_LIBRARY_DIR})
-        target_link_libraries(helloworld
+        target_link_directories(jsenv PRIVATE ${V8_DYNAMIC_LIBRARY_DIR})
+        target_link_libraries(jsenv
             v8
             v8_libplatform
             pthread
             dl
         )
-        set_target_properties(helloworld PROPERTIES
+        set_target_properties(jsenv PROPERTIES
             BUILD_RPATH "${V8_DYNAMIC_LIBRARY_DIR}"
         )
     else()
@@ -150,20 +167,22 @@ elseif (UNIX)
     endif()
 
     target_compile_definitions (helloworld PRIVATE PLATFORM_LINUX)
+    target_compile_definitions (jsenv PRIVATE PLATFORM_LINUX)
 else ()
     if ( JS_ENGINE STREQUAL "v8")
         set(LIBS_NEEDED winmm.lib dbghelp.lib shlwapi.lib)
     endif()
     if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "4")
-        target_link_libraries(hello-world
+        target_link_libraries(jsenv
             ${JS_ENGINE_ROOT}/Lib/Win32/${LIB_NAME}.lib
             ${LIBS_NEEDED}
         )
     else ()
-        target_link_libraries(helloworld
+        target_link_libraries(jsenv
             ${JS_ENGINE_ROOT}/Lib/Win64/${LIB_NAME}.lib
             ${LIBS_NEEDED}
         )
     endif ()
     target_compile_definitions (helloworld PRIVATE PLATFORM_WINDOWS)
+    target_compile_definitions (jsenv PRIVATE PLATFORM_WINDOWS)
 endif ( )

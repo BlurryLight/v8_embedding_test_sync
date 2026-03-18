@@ -13,7 +13,17 @@
 #if USING_IN_UNREAL_ENGINE
 #include "CoreMinimal.h"
 #else
+#if defined(_WIN32)
+#if defined(JSENV_EXPORTS)
+#define JSENV_API __declspec(dllexport)
+#else
+#define JSENV_API __declspec(dllimport)
+#endif
+#elif defined(__GNUC__) || defined(__clang__)
+#define JSENV_API __attribute__((visibility("default")))
+#else
 #define JSENV_API
+#endif
 #define FORCEINLINE V8_INLINE
 #define UPTRINT uintptr_t
 #endif
