@@ -194,15 +194,18 @@ private:
     std::vector<std::filesystem::path> SearchRoots;
 };
 
-std::string ResolveScriptPath()
+std::string ResolveScriptPath(const std::string& hint_path)
 {
     namespace fs = std::filesystem;
 
-    const std::vector<fs::path> script_candidates = {
-        fs::path("JavaScript") / "hello-world.js",
+    std::vector<fs::path> script_candidates = {
+        // fs::path("JavaScript") / "main.js",
     };
 
+    script_candidates.push_back(hint_path);
+
     fs::path project_root = ResolveProjectRoot();
+    project_root /= "JavaScript";
 
     std::vector<std::string> candidates;
     if (!project_root.empty())
@@ -520,7 +523,7 @@ int RunScriptProgram(const ProgramOptions& Options, RegisterBindingsCallback Reg
 
         try
         {
-            const std::string script_path = Options.ScriptPath.empty() ? ResolveScriptPath() : Options.ScriptPath;
+            const std::string script_path =  ResolveScriptPath(Options.ScriptPath.empty() ? "JavaScript/main.js" : Options.ScriptPath);
             module_resolver.SetCurrentScriptDirectory(std::filesystem::path(script_path).parent_path());
             const std::string script_source = ReadTextFile(script_path);
             if (script_source.empty())
@@ -531,37 +534,23 @@ int RunScriptProgram(const ProgramOptions& Options, RegisterBindingsCallback Reg
             else
             {
                 v8::TryCatch try_catch(isolate);
-                const auto modular_path = NormalizePathString(ResolveProjectRoot() / "JavaScript" / "puerts" / "modular.js");
-                const auto modular_source = ReadTextFile(modular_path);
-                if (modular_source.empty())
+                auto RunInternalScript = [&](std::string_view script_name)
                 {
-                    std::cerr << "bootstrap file is empty: " << modular_path << std::endl;
-                    ExitCode = 1;
-                }
-                else
-                {
-                    auto init_env_path = NormalizePathString(ResolveProjectRoot() / "TypeScript" / "Internal" / "InitEnv.js");
+                    auto init_env_path = NormalizePathString(ResolveProjectRoot() / "JavaScript" / script_name);
                     const auto init_env_source = ReadTextFile(init_env_path);
-                    if (init_env_source.empty())
-                    {
-                        std::cerr << "bootstrap file is empty: " << init_env_path << std::endl;
-                        ExitCode = 1;
-                    }
-                    else if (RunScriptString(isolate, context, modular_source, modular_path).IsEmpty())
+                    if (RunScriptString(isolate, context, init_env_source, init_env_path).IsEmpty())
                     {
                         ReportException(isolate, try_catch);
                         ExitCode = 1;
                     }
-                    else if (RunScriptString(isolate, context, init_env_source, init_env_path).IsEmpty())
-                    {
-                        ReportException(isolate, try_catch);
-                        ExitCode = 1;
-                    }
-                    else if (RunScriptString(isolate, context, script_source, script_path).IsEmpty())
-                    {
-                        ReportException(isolate, try_catch);
-                        ExitCode = 1;
-                    }
+                };
+
+                RunInternalScript("puerts/modular.js");
+                RunInternalScript("internal/initEnv.js");
+                if (RunScriptString(isolate, context, script_source, script_path).IsEmpty())
+                {
+                    ReportException(isolate, try_catch);
+                    ExitCode = 1;
                 }
             }
         }

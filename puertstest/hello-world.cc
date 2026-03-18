@@ -22,5 +22,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    Options.ScriptPath = "hello-world.js";
+
     return puerts::RunScriptProgram(Options, &puerts::RegisterExampleBindings);
 }

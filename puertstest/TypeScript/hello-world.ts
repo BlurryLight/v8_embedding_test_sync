@@ -1,6 +1,5 @@
 // @ts-ignore
-const { TestClass } = require("cpp");
-
+let TestClass = loadCppType("TestClass");
 function assert(condition, message) {
     if (!condition) {
         throw new Error(message);

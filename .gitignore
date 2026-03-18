@@ -10,3 +10,4 @@ v8Debug
 v8Release
 puertstest/node_modules
 puertstest/JavaScript
+.cache
