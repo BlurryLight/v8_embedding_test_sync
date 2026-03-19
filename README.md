@@ -5,4 +5,16 @@
 
 
 # 自编译v8
-....(TODO
+
+需要的基本目录结构
+
+├── v8
+│   └── Inc -> /home/panda/v8/v8/include
+├── v8Debug
+│   ├── Bin -> /home/panda/v8/v8/output/Debug/v8/Bin/
+│   ├── Inc -> /home/panda/v8/v8/include/
+│   └── Lib -> /home/panda/v8/v8/output/Debug/v8/Lib
+└── v8Release
+    ├── Bin -> /home/panda/v8/v8/output/Release/v8/Bin
+    ├── Inc -> /home/panda/v8/v8/include/
+    └── Lib -> /home/panda/v8/v8/output/Release/v8/Lib

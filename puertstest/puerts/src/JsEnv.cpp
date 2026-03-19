@@ -373,11 +373,11 @@ int RunScriptProgram(const ProgramOptions& Options, RegisterBindingsCallback Reg
     v8::V8::InitializePlatform(platform);
     v8::V8::Initialize();
 
-    v8::V8::EnableWorkerThreads(platform, 1);
-
     v8::Isolate::CreateParams create_params;
     create_params.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
     v8::Isolate* isolate = v8::Isolate::New(create_params);
+
+    v8::V8::EnableWorkerThreads(platform, 1);
     int ExitCode = 0;
 
     FCppObjectMapper cppObjectMapper;
