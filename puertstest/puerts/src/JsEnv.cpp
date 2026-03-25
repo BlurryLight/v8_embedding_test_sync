@@ -2,11 +2,14 @@
 
 #include <filesystem>
 #include <fstream>
+#include <chrono>
 #include <iostream>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "CppObjectMapper.h"
@@ -18,6 +21,74 @@
 
 namespace
 {
+
+using JitCompileClock = std::chrono::steady_clock;
+
+struct JitCompileScope
+{
+    v8::JitCodeEventKind Kind;
+    JitCompileClock::time_point Start;
+};
+
+thread_local std::vector<JitCompileScope> GJitCompileScopes;
+std::mutex GJitProfilerLogMutex;
+
+const char* ToJitCompileKindName(v8::JitCodeEventKind Kind)
+{
+    switch (Kind)
+    {
+    case v8::kJitCodeEventBaseline:
+        return "Baseline";
+    case v8::kJitCodeEventMaglev:
+        return "Maglev";
+    case v8::kJitCodeEventMaglevConcurrent:
+        return "MaglevConcurrent";
+    case v8::kJitCodeEventTurbofan:
+        return "TurboFan";
+    case v8::kJitCodeEventTurbofanConcurrent:
+        return "TurboFanConcurrent";
+    default:
+        return "Unknown";
+    }
+}
+
+void JitCompileStart(v8::Isolate* isolate, v8::JitCodeEventKind Kind)
+{
+    GJitCompileScopes.push_back({Kind, JitCompileClock::now()});
+    std::lock_guard<std::mutex> Lock(GJitProfilerLogMutex);
+    std::cout << "[jit-profiler] start kind=" << ToJitCompileKindName(Kind)
+              << " isolate=" << isolate
+              << " thread=" << std::this_thread::get_id() << std::endl;
+}
+
+void JitCompileStop(v8::Isolate* isolate, v8::JitCodeEventKind Kind)
+{
+    if (GJitCompileScopes.empty())
+    {
+        std::lock_guard<std::mutex> Lock(GJitProfilerLogMutex);
+        std::cout << "[jit-profiler] stop kind=" << ToJitCompileKindName(Kind)
+                  << " isolate=" << isolate
+                  << " thread=" << std::this_thread::get_id()
+                  << " duration_us=missing-start" << std::endl;
+        return;
+    }
+
+    JitCompileScope Scope = GJitCompileScopes.back();
+    GJitCompileScopes.pop_back();
+    const auto DurationUs =
+        std::chrono::duration_cast<std::chrono::microseconds>(JitCompileClock::now() - Scope.Start).count();
+
+    std::lock_guard<std::mutex> Lock(GJitProfilerLogMutex);
+    std::cout << "[jit-profiler] stop kind=" << ToJitCompileKindName(Kind)
+              << " isolate=" << isolate
+              << " thread=" << std::this_thread::get_id()
+              << " duration_us=" << DurationUs;
+    if (Scope.Kind != Kind)
+    {
+        std::cout << " mismatched_start_kind=" << ToJitCompileKindName(Scope.Kind);
+    }
+    std::cout << std::endl;
+}
 
 std::string ReadTextFile(const std::string& path)
 {
@@ -371,11 +442,19 @@ int RunScriptProgram(const ProgramOptions& Options, RegisterBindingsCallback Reg
       platform = v8::platform::NewDefaultPlatform_Without_Stl();
     }
     v8::V8::InitializePlatform(platform);
+    v8::V8::SetFlagsFromString(
+        "--allow-natives-syntax "
+        "--always-sparkplug "
+        "--jit-fuzzing "
+        "--maglev "
+        "--concurrent-recompilation");
     v8::V8::Initialize();
 
     v8::Isolate::CreateParams create_params;
     create_params.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
     v8::Isolate* isolate = v8::Isolate::New(create_params);
+    isolate->AddJitCodeEventPrologueCallback(JitCompileStart, v8::kJitCodeEventAll);
+    isolate->AddJitCodeEventEpilogueCallback(JitCompileStop, v8::kJitCodeEventAll);
 
     v8::V8::EnableWorkerThreads(platform, 1);
     int ExitCode = 0;

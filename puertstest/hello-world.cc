@@ -23,7 +23,7 @@ int main(int argc, char* argv[])
     }
 
     Options.ScriptPath = "hello-world.js";
-    Options.bSingleThreadPlatform = true;
+    Options.bSingleThreadPlatform = false;
 
     return puerts::RunScriptProgram(Options, &puerts::RegisterExampleBindings);
 }
